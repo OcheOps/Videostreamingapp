@@ -1,47 +1,73 @@
-
-
-import { Injectable, HttpException, HttpStatus } from "@nestjs/common";
+import {
+    Injectable,
+    NotFoundException,
+    ServiceUnavailableException,
+} from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
-import { User, UserDocument } from "../model/user.schema";
-import * as bcrypt from 'bcrypt';
-import { JwtService } from '@nestjs/jwt';
+import { Video, VideoDocument } from "../model/video.schema";
+import { createReadStream, statSync } from 'fs';
+import { join } from 'path';
+import { Request, Response } from 'express';
 
 @Injectable()
-export class UserService {
+export class VideoService {
 
-    constructor(@InjectModel(User.name) private userModel: Model<UserDocument>,
+    constructor(@InjectModel(Video.name) private videoModel: Model<VideoDocument>) { }
 
-    ) { }
-
-    async signup(user: User): Promise<User> {
-        const salt = await bcrypt.genSalt();
-        const hash = await bcrypt.hash(user.password, salt);
-        const reqBody = {
-            fullname: user.fullname,
-            email: user.email,
-            password: hash
+    async createVideo(video: Object): Promise<Video> {
+        const newVideo = new this.videoModel(video);
+        return newVideo.save();
+    }
+    async readVideo(id): Promise<any> {
+        if (id.id) {
+            return this.videoModel.findOne({ _id: id.id }).populate("createdBy").exec();
         }
-        const newUser = new this.userModel(reqBody);
-        return newUser.save();
+        return this.videoModel.find().populate("createdBy").exec();
     }
 
-    async signin(user: User, jwt: JwtService): Promise<any> {
-        const foundUser = await this.userModel.findOne({ email: user.email }).exec();
-        if (foundUser) {
-            const { password } = foundUser;
-            if (bcrypt.compare(user.password, password)) {
-                const payload = { email: user.email };
-                return {
-                    token: jwt.sign(payload),
-                };
+    async streamVideo(id: string, response: Response, request: Request) {
+        try {
+            const data = await this.videoModel.findOne({ _id: id })
+
+            if (!data) {
+                throw new NotFoundException(null, 'VideoNotFound')
             }
-            return new HttpException('Incorrect username or password', HttpStatus.UNAUTHORIZED)
+
+            const { range } = request.headers;
+            if (range) {
+                const { video } = data;
+                const videoPath = statSync(join(process.cwd(), `./public/${video}`))
+                const CHUNK_SIZE = 1 * 1e6;
+                const start = Number(range.replace(/\D/g, ''));
+                const end = Math.min(start + CHUNK_SIZE, videoPath.size - 1);
+                const videoLength = end - start + 1;
+                response.status(206)
+                response.header({
+                    'Content-Range': `bytes ${start}-${end}/${videoPath.size}`,
+                    'Accept-Ranges': 'bytes',
+                    'Content-length': videoLength,
+                    'Content-Type': 'video/mp4',
+                })
+                const vidoeStream = createReadStream(join(process.cwd(), `./public/${video}`), { start, end });
+                vidoeStream.pipe(response);
+            } else {
+                throw new NotFoundException(null, 'range not found')
+            }
+
+
+        } catch (e) {
+            console.error(e)
+            throw new ServiceUnavailableException()
         }
-        return new HttpException('Incorrect username or password', HttpStatus.UNAUTHORIZED)
+
     }
 
-    async getOne(email): Promise<User> {
-        return await this.userModel.findOne({ email }).exec();
+    async update(id, video: Video): Promise<Video> {
+        return await this.videoModel.findByIdAndUpdate(id, video, { new: true })
+    }
+
+    async delete(id): Promise<any> {
+        return await this.videoModel.findByIdAndRemove(id);
     }
 }
