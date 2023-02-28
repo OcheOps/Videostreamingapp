@@ -19,7 +19,7 @@ import { isAuthenticated } from './app.middleware';
 
 @Module({
   imports: [
-     MongooseModule.forRoot('mongodb://localhost:27017/Stream'),
+     MongooseModule.forRoot('mongodb://mongo:er7lIGEDzq0gfiAGOtmt@containers-us-west-115.railway.app:5492'),
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
     MongooseModule.forFeature([{ name: Video.name, schema: VideoSchema }]),
 
