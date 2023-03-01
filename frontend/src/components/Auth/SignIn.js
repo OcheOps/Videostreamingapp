@@ -26,7 +26,7 @@ export default function SignIn(props) {
       email: formData.get('email'),
       password: formData.get('password')
     };
-    const { data } = await axios.post("http://localhost:3002/api/v1/user/signin", form);
+    const { data } = await axios.post("https://videostreamingapp-production.up.railway.app/signin", form);
     if (data.status === parseInt('401')) {
       setErrorMessage(data.response)
     } else {
